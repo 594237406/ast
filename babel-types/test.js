@@ -1,21 +1,30 @@
 const babylon = require("babylon");
 const traverse = require("babel-traverse").default;
-const babelTypes = require("babel-types");
+const t = require("babel-types");
 const babel = require('babel-core');
 
-const code = `function square(n) {
-  return n * n;
+const code = `function square(store) {
+  store.set('ast', 'abc')
+  store.name('ast', {})
+  const a = 'store.set'
+  return store;
 }`;
 
 const ast = babylon.parse(code);
 
 traverse(ast, {
   enter(path) {
-    if (babelTypes.isIdentifier(path.node, { name: "n" })) {
-      path.node.name = "x";
+    const { node } = path
+    const { type, callee, arguments: args }= node
+    if (t.isCallExpression(node)) {
+      const { object, property } = callee
+      if (object.name === 'store' && property.name === 'set') {
+        const [{ value: key }, { value: val } ] = args
+        console.log(key, val)
+      }
     }
   }
 });
 
 const { code: c } = babel.transformFromAst(ast, "", {});
-console.log(c)
+//console.log(c)

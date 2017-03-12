@@ -3,7 +3,7 @@ const babel = require('babel-core');
 const traverse = require('babel-traverse').default
 
 const code = `function square(store) {
-  store.set('ast', {})
+  store.set('ast', 'abc')
   store.name('ast', {})
   const a = 'store.set'
   return store;
@@ -14,12 +14,14 @@ const ast = babylon.parse(code);
 
 traverse(ast, {
   enter(path) {
-    if (
-      path.node.type === "Identifier" &&
-      path.node.name === "store" && path.parent.type === 'MemberExpression' && path.parent.property.name === 'set'
-    ) {
-      path.parent.property.name = 'setStore'
-      path.parentPath.parentPath.node.arguments[0].value = 'astTest'
+    const { node } = path
+    const { type, callee, arguments: args }= node
+    if (type === 'CallExpression') {
+      const { object, property } = callee
+      if (object.name === 'store' && property.name === 'set') {
+        const [{ value: key }, { value: val } ] = args
+        console.log(key, val)
+      }
     }
   }
 });

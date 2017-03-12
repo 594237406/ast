@@ -6,6 +6,22 @@ const code = `function square(store) {
   return store;
 }`;
 
-const ast = babylon.parse(code);
+const astParse = babylon.parse(code, {
+//  plugins: [
+//    // enable jsx and flow syntaxconst { Button } = require(a)
+//    "jsx",
+//    "flow"
+//  ]
 
-console.log(ast)
+});
+
+
+const astParseExpression = babylon.parseExpression(code, {
+//  plugins: [
+//    "jsx",
+//    "es2015"
+//  ]
+});
+
+// parse 是词法分析，parseExpression是语法分析
+console.log(astParse, astParseExpression)

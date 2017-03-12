@@ -1,14 +1,101 @@
-##介绍
 
-Babel 是一个通用的多功能的 JavaScript编译器。此外它还拥有众多模块可用于不同形式的静态分析。
+#AST语法结构树初学者完整教程
 
-    静态分析是在不需要执行代码的前提下对代码进行分析的处理过程 （执行代码的同时进行代码分析即是动态分析）。 静态分析的目的是多种多样的， 它可用于语法检查，编译，代码高亮，代码转换，优化，压缩等等场景。
+##编写你的第一个 Babel 插件
 
-你可以使用 Babel 创建多种类型的工具来帮助你更有效率并且写出更好的程序。
+先抛开各种概念和API，直接上干货，做一个简单而又实用的功能。
+
+比如你有以下代码
+```
+import { Button } from 'antd'
+```
+
+我们只需要antd里面的一个组件Button，现在却导入antd/lib/index.js所有对象，这显然不是我们想要的。
+
+我们希望只引入antd/lib/button
+```
+import Button from 'antd/lib/button'
+```
+
+但是这样写又过于麻烦，多个组件得写很多行，每行都有个相同的antd/lib代码冗余，又不雅观又不好维护。
+
+我们可以使用Babel插件来解决这个问题。（[完整的代码示例][1]）
+
+ 1. 建立好如下目录结构
+    ```
+    - root
+        - node_modules
+            - babel-plugin-import
+                - index.js
+                - package.json
+        - test.js            
+    ```
+
+ 2. test.js文件内容:
+    ```
+    const babel = require('babel-core');
+    // 转换前的代码
+    const code = `import { Button } from 'antd'`;
+    
+    var result = babel.transform(code, {
+      plugins:["import"]
+    });
+    
+    // 转换后的代码
+    console.log(result.code);
+    // 输出：import Button from 'antd/lib/button'
+    ```
+    
+    babel-core是babel的核心包，transform函数可以传入code,返回转换后的代码，ast语法树和source-map映射地图。具体API参考 [babel-core][2]
+
+ 3. package.json的main属性指向index.js，不解释
+ 4. 好了，开始编写我们的插件吧,index.js文件内容：
+    ```
+    /* 单词首字母小写 */
+    const toLowerCase = word =>
+      Array.from(word).map((char, index) =>
+        !index ? char.toLowerCase() : char).join('')
+
+    module.exports = ({ types }) => (
+      {
+        // 插件入口
+        visitor: {
+          // 处理类型： Import声明
+          ImportDeclaration(path) {
+            const { node } = path
+            const { type, specifiers, source } = node
+            // 过滤掉默认引用，如 import antd from 'antd'
+            const importSpecifiers = specifiers.filter(specifier =>
+                types.isImportSpecifier(specifier))
+            // 例子只处理了一个组件的引用
+            if (importSpecifiers.length === 1) {
+              const [importSpecifier] = importSpecifiers
+              // 小写处理组件引用，如Import { Button }，改为: antd/lib/button
+              const element = toLowerCase(importSpecifier.imported.name)
+              // 引入改为默认引入，如Import { Button }, 改为: import Button
+              importSpecifier.type = 'ImportDefaultSpecifier'
+              source.value += `/lib/${element}`
+            }
+          }
+        }
+      })
+    ```
+    短短的几行代码，相信看了注释，亲爱的读者们也是一头雾水。那么请登录 [ast语法树在线生成网站][3]，输入`import Button from 'antd'`,在看右边的生成的语法树，**我们从这里开始讲起**。
+
+    代码中ImportDeclaration代表只处理代码中`import`这样的代码（请注意网站生成的语法树）。
+
+    我们拿到specifiers是引用声明，就是`import { Button}`中的Button，并且判断长度为1（长度大于1的话得多行引入，要修改语法树结构）。做了以下两件事：
+
+    1. 拿到Button ,转成小写，拼接到`source.value`也就是`'antd'`后面。
+    1. 把Specifier类型为`ImportSpecifier`也就是`{ Button }`改为`ImportDefaultSpecifier`，这样就把 `Import { Button }`改成了`Import Button`。
+
+    OK，就这么简单，也许你还没有明白，那么请联系我mail: hongji_12313@163.com
 
 ##基础
 
-Babel 是 JavaScript 编译器，更确切地说是源码到源码的编译器，通常也叫做“转换编译器（transpiler）”。 意思是说你为 Babel 提供一些 JavaScript 代码，Babel 更改这些代码，然后返回给你新生成的代码。
+Babel 是 JavaScript 静态分析编译器，更确切地说是源码到源码的编译器，通常也叫做“转换编译器（transpiler）”。 意思是说你为 Babel 提供一些 JavaScript 代码，Babel 更改这些代码，然后返回给你新生成的代码。
+
+    静态分析是在不需要执行代码的前提下对代码进行分析的处理过程 （执行代码的同时进行代码分析即是动态分析）。 静态分析的目的是多种多样的， 它可用于语法检查，编译，代码高亮，代码转换，优化，压缩等等场景。
 
 ###抽象语法树（ASTs）
 这个处理过程中的每一步都涉及到创建或是操作抽象语法树，亦称 AST。
@@ -18,7 +105,7 @@ Babel 使用一个基于 ESTree 并修改过的 AST，它的内核说明文档�
     function square(n) {
       return n * n;
     }
-```    
+```
 AST Explorer 可以让你对 AST 节点有一个更好的感性认识。 这里是上述代码的一个示例链接。
 
 同样的程序可以表述为下面的列表：
@@ -279,7 +366,7 @@ Called!
       - BinaryExpression (argument)
         - Identifier (left)
         - Identifier (right)
-```        
+```
 当我们向下遍历这颗树的每一个分支时我们最终会走到尽头，于是我们需要往上遍历回去从而获取到下一个节点。 向下遍历这棵树我们进入每个节点，向上遍历回去时我们退出每个节点。
 
 让我们以上面那棵树为例子走一遍这个过程。
@@ -666,12 +753,12 @@ traverse(ast, {
   }
 });
 ```
-Definitions（定义）
+####Definitions（定义）
 
 Babel Types模块拥有每一个单一类型节点的定义，包括有哪些属性分别属于哪里，哪些值是合法的，如何构建该节点，该节点应该如何去遍历，以及节点的别名等信息。
 
 单一节点类型定义的形式如下：
-
+```
 defineType("BinaryExpression", {
   builder: ["operator", "left", "right"],
   fields: {
@@ -688,16 +775,20 @@ defineType("BinaryExpression", {
   visitor: ["left", "right"],
   aliases: ["Binary", "Expression"]
 });
-Builders（构建器）
+```
+
+####Builders（构建器）
 
 你会注意到上面的 BinaryExpression 定义有一个 builder 字段。.
-
+```
 builder: ["operator", "left", "right"]
+```
 这是由于每一个节点类型都有构建器方法：
-
+```
 t.binaryExpression("*", t.identifier("a"), t.identifier("b"));
+```
 它可以创建如下所示的 AST：
-
+```
 {
   type: "BinaryExpression",
   operator: "*",
@@ -710,15 +801,17 @@ t.binaryExpression("*", t.identifier("a"), t.identifier("b"));
     name: "b"
   }
 }
+```
 当打印出来（输出）之后是这样的：
-
+```
 a * b
+```
 构建器还会验证自身创建的节点，并在错误使用的情形下抛出描述性的错误。这就引出了接下来的一种方法。
 
-Validators（验证器）
+####Validators（验证器）
 
 BinaryExpression 的定义还包含了节点的 fields 字段信息并且指示了如何验证它们。
-
+```
 fields: {
   operator: {
     validate: assertValueType("string")
@@ -730,29 +823,33 @@ fields: {
     validate: assertNodeType("Expression")
   }
 }
+```
 这可以用来创建两种类型的验证方法。第一种是 isX。.
-
+```
 t.isBinaryExpression(maybeBinaryExpressionNode);
+```
 此方法用来确保节点是一个二进制表达式，不过你也可以传入第二个参数来确保节点包含特定的属性和值。
-
+```
 t.isBinaryExpression(maybeBinaryExpressionNode, { operator: "*" });
+```
 这些方法还有一种更加，嗯，断言式的版本，会抛出异常而不是返回 true 或 false。.
-
+```
 t.assertBinaryExpression(maybeBinaryExpressionNode);
 t.assertBinaryExpression(maybeBinaryExpressionNode, { operator: "*" });
 // Error: Expected type "BinaryExpression" with option { "operator": "*" }
-Converters（变换器）
+```
+####Converters（变换器）
 
-[WIP]
-babel-generator
+#####babel-generator
 
 Babel Generator模块是 Babel 的代码生成器。它将 AST 输出为代码并包括源码映射（sourcemaps）。
 
 运行以下命令来安装它：
-
+```
 $ npm install --save babel-generator
+```
 然后如下所示使用：
-
+```
 import * as babylon from "babylon";
 import generate from "babel-generator";
 
@@ -767,8 +864,9 @@ generate(ast, null, code);
 //   code: "...",
 //   map: "..."
 // }
+```
 你也可以给 generate() 传递选项。.
-
+```
 generate(ast, {
   retainLines: false,
   compact: "auto",
@@ -776,10 +874,11 @@ generate(ast, {
   quotes: "double",
   // ...
 }, code);
-babel-template
+```
+#####babel-template
 
 Babel Template模块是一个很小但却非常有用的模块。它能让你编写带有占位符的字符串形式的代码，你可以用此来替代大量的手工构建的 AST。
-
+```
 $ npm install --save babel-template
 import template from "babel-template";
 import generate from "babel-generator";
@@ -795,544 +894,10 @@ const ast = buildRequire({
 });
 
 console.log(generate(ast).code);
-var myModule = require("my-module");
-编写你的第一个 Babel 插件
+// var myModule = require("my-module");
+```
 
-现在你已经熟悉了 Babel 的所有基础知识了，让我们把这些知识和插件的 API融合在一起来编写第一个 Babel 插件吧。
 
-从一个接收了 babel 对象作为参数的 function 开始。
-
-export default function(babel) {
-  // plugin contents
-}
-由于你将会经常这样使用，所以直接取出 babel.types 会更方便：（译注：这是 ES2015 语法中的对象解构，即 Destructuring）
-
-export default function({ types: t }) {
-  // plugin contents
-}
-接着返回一个对象，其 visitor 属性是这个插件的主要访问者。
-
-export default function({ types: t }) {
-  return {
-    visitor: {
-      // visitor contents
-    }
-  };
-};
-让我们快速编写一个可用的插件来展示一下它是如何工作的。下面是我们的源代码：
-
-foo === bar;
-其 AST 形式如下：
-
-{
-  type: "BinaryExpression",
-  operator: "===",
-  left: {
-    type: "Identifier",
-    name: "foo"
-  },
-  right: {
-    type: "Identifier",
-    name: "bar"
-  }
-}
-我们从添加 BinaryExpression 访问者方法开始：
-
-export default function({ types: t }) {
-  return {
-    visitor: {
-      BinaryExpression(path) {
-        // ...
-      }
-    }
-  };
-}
-然后我们更确切一些，只关注哪些使用了 === 的 BinaryExpression。
-
-visitor: {
-  BinaryExpression(path) {
-    if (path.node.operator !== "===") {
-      return;
-    }
-
-    // ...
-  }
-}
-现在我们用新的标识符来替换 left 属性：
-
-BinaryExpression(path) {
-  if (path.node.operator !== "===") {
-    return;
-  }
-
-  path.node.left = t.identifier("sebmck");
-  // ...
-}
-于是如果我们运行这个插件我们会得到：
-
-sebmck === bar;
-现在只需要替换 right 属性了。
-
-BinaryExpression(path) {
-  if (path.node.operator !== "===") {
-    return;
-  }
-
-  path.node.left = t.identifier("sebmck");
-  path.node.right = t.identifier("dork");
-}
-这就是我们的最终结果了：
-
-sebmck === dork;
-完美！我们的第一个 Babel 插件。
-
-转换操作
-
-访问
-
-检查节点是否为某种特定类型
-
-要检查节点的类型是什么，比较好的方法是：
-
-BinaryExpression(path) {
-  if (t.isIdentifier(path.node.left)) {
-    // ...
-  }
-}
-你也可以对该节点进行浅层属性检查：
-
-BinaryExpression(path) {
-  if (t.isIdentifier(path.node.left, { name: "n" })) {
-    // ...
-  }
-}
-功能上等价于：
-
-BinaryExpression(path) {
-  if (
-    path.node.left != null &&
-    path.node.left.type === "Identifier" &&
-    path.node.left.name === "n"
-  ) {
-    // ...
-  }
-}
-检查标识符是否正在被引用着
-
-Identifier(path) {
-  if (path.isReferencedIdentifier()) {
-    // ...
-  }
-}
-或者：
-
-Identifier(path) {
-  if (t.isReferenced(path.node, path.parent)) {
-    // ...
-  }
-}
-处理
-
-替换节点
-
-BinaryExpression(path) {
-  path.replaceWith(
-    t.binaryExpression("**", path.node.left, t.numberLiteral(2))
-  );
-}
-  function square(n) {
--   return n * n;
-+   return n ** 2;
-  }
-用多个节点替换一个节点
-
-ReturnStatement(path) {
-  path.replaceWithMultiple([
-    t.expressionStatement(t.stringLiteral("Is this the real life?")),
-    t.expressionStatement(t.stringLiteral("Is this just fantasy?")),
-    t.expressionStatement(t.stringLiteral("(Enjoy singing the rest of the song in your head)")),
-  ]);
-}
-  function square(n) {
--   return n * n;
-+   "Is this the real life?";
-+   "Is this just fantasy?";
-+   "(Enjoy singing the rest of the song in your head)";
-  }
-注意： 当用多个节点替换表达式时，这些节点必须是声明（statements）。 这是因为当节点替换发生时，Babel 极广泛地使用了启发式的算法，这意味着如果使用了非声明的代码会产生非常冗长的、疯狂的转换动作。
-用字符串源码替换节点
-
-FunctionDeclaration(path) {
-  path.replaceWithSourceString(`function add(a, b) {
-    return a + b;
-  }`);
-}
-- function square(n) {
--   return n * n;
-+ function add(a, b) {
-+   return a + b;
-  }
-注意： 除非你要处理动态的源码字符串，否则不推荐使用这个 API，反之在访问者外部解析代码会更有效率。
-插入同级节点
-
-FunctionDeclaration(path) {
-  path.insertBefore(t.expressionStatement(t.stringLiteral("Because I'm easy come, easy go.")));
-  path.insertAfter(t.expressionStatement(t.stringLiteral("A little high, little low.")));
-}
-+ "Because I'm easy come, easy go.";
-  function square(n) {
-    return n * n;
-  }
-+ "A little high, little low.";
-注意： 这里同样应该使用声明或者一个声明数组。 因为使用了在用多个节点替换一个节点一节提到的启发式算法。.
-移除节点
-
-FunctionDeclaration(path) {
-  path.remove();
-}
-- function square(n) {
--   return n * n;
-- }
-替换父节点
-
-BinaryExpression(path) {
-  path.parentPath.replaceWith(
-    t.expressionStatement(t.stringLiteral("Anyway the wind blows, doesn't really matter to me, to me."))
-  );
-}
-  function square(n) {
--   return n * n;
-+   "Anyway the wind blows, doesn't really matter to me, to me.";
-  }
-移除父节点
-
-BinaryExpression(path) {
-  path.parentPath.remove();
-}
-  function square(n) {
--   return n * n;
-  }
-Scope（作用域）
-
-检查本地变量是否有绑定
-
-FunctionDeclaration(path) {
-  if (path.scope.hasBinding("n")) {
-    // ...
-  }
-}
-这会遍寻作用域树并查找指定的绑定。
-
-你也可以检查作用域是否拥有属于自己的绑定：
-
-FunctionDeclaration(path) {
-  if (path.scope.hasOwnBinding("n")) {
-    // ...
-  }
-}
-生成唯一标识符（UID）
-
-这会生成一个不会和任何本地定义的变量冲突的标识符。
-
-FunctionDeclaration(path) {
-  path.scope.generateUidIdentifier("uid");
-  // Node { type: "Identifier", name: "_uid" }
-  path.scope.generateUidIdentifier("uid");
-  // Node { type: "Identifier", name: "_uid2" }
-}
-提升变量声明至父级作用域
-
-有时你会需要提升一个 VariableDeclaration 以便可以给它赋值。
-
-FunctionDeclaration(path) {
-  const id = path.scope.generateUidIdentifierBasedOnNode(path.node.id);
-  path.remove();
-  path.scope.parent.push({ id, init: path.node });
-}
-- function square(n) {
-+ var _square = function square(n) {
-    return n * n;
-- }
-+ };
-重命名绑定及其引用
-
-FunctionDeclaration(path) {
-  path.scope.rename("n", "x");
-}
-- function square(n) {
--   return n * n;
-+ function square(x) {
-+   return x * x;
-  }
-或者，你可以重命名绑定来生成唯一的标识符：
-
-FunctionDeclaration(path) {
-  path.scope.rename("n");
-}
-- function square(n) {
--   return n * n;
-+ function square(_n) {
-+   return _n * _n;
-  }
-插件选项
-
-若你希望让你的用户自定义 Babel 插件的行为，你可以接收指定的选项：
-
-{
-  plugins: [
-    ["my-plugin", {
-      "option1": true,
-      "option2": false
-    }]
-  ]
-}
-这些选项会通过 state 对象传递给插件的访问者（visitors）:
-
-export default function({ types: t }) {
-  return {
-    visitor: {
-      FunctionDeclaration(path, state) {
-        console.log(state.opts);
-        // { option1: true, option2: false }
-      }
-    }
-  }
-}
-这些选项是插件特定的，因此你不能从其他插件里访问到这些选项。
-
-构建节点
-
-当编写转换动作时你会时常需要构建一些节点然后把它们插入到 AST 中。 正如之前提到的，你可以使用 babel-types 模块里的 Builders（构建器） 方法。
-
-建器的方法名称就是你想要构建的节点类型名称，只不过第一个字母是小写的。 比方说如果你要构建一个 MemberExpression 节点，你可以使用 t.memberExpression(...)。.
-
-这些构建器的参数根据节点定义各有不同。 我们做了一些工作来生成便于阅读的节点定义文档，不过现在你可以在这里找到它们。.
-
-节点定义如下所示：
-
-defineType("MemberExpression", {
-  builder: ["object", "property", "computed"],
-  visitor: ["object", "property"],
-  aliases: ["Expression", "LVal"],
-  fields: {
-    object: {
-      validate: assertNodeType("Expression")
-    },
-    property: {
-      validate(node, key, val) {
-        let expectedType = node.computed ? "Expression" : "Identifier";
-        assertNodeType(expectedType)(node, key, val);
-      }
-    },
-    computed: {
-      default: false
-    }
-  }
-});
-你可以看到关于特定节点类型的所有信息，包括如何构建它，遍历它，以及验证它。
-
-看一看 builder 属性，你可以找到调用构建器方法时需要的 3 个参数（t.memberExpression）。).
-
-builder: ["object", "property", "computed"],
-注意有时候除了 builder 数组包含的参数以外还有更多的属性可用于节点的自定义。 这是为了避免构建器含有太多参数。 此时你需要手动设置这些属性。 一个参考例子是 ClassMethod。.
-你可以通过 fields 对象查看构建器参数的验证条件。
-
-fields: {
-  object: {
-    validate: assertNodeType("Expression")
-  },
-  property: {
-    validate(node, key, val) {
-      let expectedType = node.computed ? "Expression" : "Identifier";
-      assertNodeType(expectedType)(node, key, val);
-    }
-  },
-  computed: {
-    default: false
-  }
-}
-你可以看到 object 必须得是一个 Expression，property 要么得是一个 Expression 要么得是一个 Identifier，取决于其成员表达式是否是 computed，而 computed 是一个布尔值，缺省为 false。.
-
-于是我们可以这样来构造一个 MemberExpression：
-
-t.memberExpression(
-  t.identifier('object'),
-  t.identifier('property')
-  // `computed` is optional
-);
-得到结果为：
-
-object.property
-可是我们说了 object 必须得是一个 Expression 那么为什么 Identifier 是合法的呢？
-
-如果我们看一下 Identifier 的定义就知道它有一个 aliases 属性，声明了它也可以是一个表达式。
-
-aliases: ["Expression", "LVal"],
-所以由于 MemberExpression 是一个 Expression 类型，我们可以把它设置为另一个 MemberExpression 的 object：
-
-t.memberExpression(
-  t.memberExpression(
-    t.identifier('member'),
-    t.identifier('expression')
-  ),
-  t.identifier('property')
-)
-得到结果为：
-
-member.expression.property
-你不太可能把每种节点类型的构建器方法签名都背下来，所以最好花些时间来理解它们是如何通过节点定义生成出来的。
-
-你可以在这里找到所有的定义，也可以在这里查看它们的文档。
-
-最佳实践
-
-I'll be working on this section over the coming weeks.
-尽量避免遍历抽象语法树（AST）
-
-遍历 AST 的代价很昂贵，并且很容易做出非必要的遍历，可能是数以千计甚或上万次的多余操作。
-
-Babel 尽可能的对此做出了优化，方法是如果合并多个访问者能够在单次遍历做完所有事情的话那就合并它们。
-
-及时合并访问者对象
-
-当编写访问者时，若逻辑上必要的话，它会试图在多处调用 path.traverse。
-
-path.traverse({
-  Identifier(path) {
-    // ...
-  }
-});
-
-path.traverse({
-  BinaryExpression(path) {
-    // ...
-  }
-});
-不过若能把它们写进一个访问者的话会更好，这样只会运行一次，否则你会毫无必要的对同一棵树遍历多次。
-
-path.traverse({
-  Identifier(path) {
-    // ...
-  },
-  BinaryExpression(path) {
-    // ...
-  }
-});
-可以手动查找就不要遍历
-
-访问者也会尝试在查找一个特定节点类型时调用 path.traverse。
-
-const visitorOne = {
-  Identifier(path) {
-    // ...
-  }
-};
-
-const MyVisitor = {
-  FunctionDeclaration(path) {
-    path.get('params').traverse(visitorOne);
-  }
-};
-然而如果你查找的是很明确并且是表层的节点，那么手动去查找它们会避免代价更高的遍历。
-
-const MyVisitor = {
-  FunctionDeclaration(path) {
-    path.node.params.forEach(function() {
-      // ...
-    });
-  }
-};
-优化嵌套的访问者对象
-
-当你嵌套访问者时，直接把它们嵌套式的写进代码里看起来很合理。
-
-const MyVisitor = {
-  FunctionDeclaration(path) {
-    path.traverse({
-      Identifier(path) {
-        // ...
-      }
-    });
-  }
-};
-当时上述代码在每次调用 FunctionDeclaration() 时都会创建新的访问者对象，使得 Babel 变得更大并且每次都要去做验证。 这也是代价不菲的，所以最好把访问者向上提升。
-
-const visitorOne = {
-  Identifier(path) {
-    // ...
-  }
-};
-
-const MyVisitor = {
-  FunctionDeclaration(path) {
-    path.traverse(visitorOne);
-  }
-};
-如果你需要嵌套的访问者的内部状态，就像这样：
-
-const MyVisitor = {
-  FunctionDeclaration(path) {
-    var exampleState = path.node.params[0].name;
-
-    path.traverse({
-      Identifier(path) {
-        if (path.node.name === exampleState) {
-          // ...
-        }
-      }
-    });
-  }
-};
-可以传递给 traverse() 方法的第二个参数然后在访问者中用 this 去访问。
-
-const visitorOne = {
-  Identifier(path) {
-    if (path.node.name === this.exampleState) {
-      // ...
-    }
-  }
-};
-
-const MyVisitor = {
-  FunctionDeclaration(path) {
-    var exampleState = path.node.params[0].name;
-    path.traverse(visitorOne, { exampleState });
-  }
-};
-留意嵌套结构
-
-有时候在考虑一些转换时，你可能会忘记某些结构是可以嵌套的。
-
-举例来说，假设我们要从 Foo ClassDeclaration 中查找 constructor ClassMethod。.
-
-class Foo {
-  constructor() {
-    // ...
-  }
-}
-const constructorVisitor = {
-  ClassMethod(path) {
-    if (path.node.name === 'constructor') {
-      // ...
-    }
-  }
-}
-
-const MyVisitor = {
-  ClassDeclaration(path) {
-    if (path.node.id.name === 'Foo') {
-      path.traverse(constructorVisitor);
-    }
-  }
-}
-可是我们忽略了类型定义是可以嵌套的，于是使用上面的遍历方式最终也会找到嵌套的 constructor：
-
-class Foo {
-  constructor() {
-    class Bar {
-      constructor() {
-        // ...
-      }
-    }
-  }
-}
+  [1]: https://github.com/antgod/ast/babel-plugin-test
+  [2]: https://babeljs.io/docs/core-packages/
+  [3]: http://esprima.org/demo/parse.html#
